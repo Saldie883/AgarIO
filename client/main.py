@@ -45,7 +45,7 @@ def make_request(requestType, requestMessage):
     sock.sendto(pickle.dumps(data),(udp_host,udp_port))
 
 def handle_request(data):
-    global localAddr
+    global localAddr, isWorking
     data = pickle.loads(data)
     requestType = data["requestType"]
     requestMessage = data["requestMessage"]
@@ -69,6 +69,16 @@ def handle_request(data):
         remotePlayers[data[0]].color = data[5]
         remotePlayers[data[0]].outlineColor = data[6]
         remotePlayers[data[0]].pieces = data[7]
+    elif requestType == 5:
+        data = data["requestMessage"]
+        loser = data[0]
+        print(loser)
+        print(localAddr)
+        if loser == localAddr:
+            isWorking = False
+        else:
+            if loser in enemies.copy():
+                del enemies[loser]
 
 def start_the_game():
     global gameState, menu, player, sock
@@ -217,10 +227,10 @@ class Player(Drawable):
                 edibles.remove(edible)
 
     def collisionDetectionWithEnemies(self, enemies):
-        enemy_copy = enemies
-        for enemy in enemy_copy:
+        for enemy in enemies.copy():
             if(getDistance((enemies[enemy].x, enemies[enemy].y), (self.x,self.y)) <= self.mass/2):
                 self.mass+=0.5
+                make_request(5, [enemy, localAddr])  
                 del enemies[enemy]
 
     def move(self):
@@ -331,5 +341,3 @@ while isWorking:
             remotePlayers[i].draw()
 
     pygame.display.flip()
-
-thread.exit()
