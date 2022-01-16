@@ -55,10 +55,32 @@ class Camera:
         self.centre(player)
 
 
+class Drawable:
+    """ Абстрактный класс для обрисовки всех элементов
+    """
+    def __init__(self, surface, camera):
+        self.surface = surface
+        self.camera = camera
 
+    def draw(self):
+        pass
+
+class Grid(Drawable):
+    def __init__(self, surface, camera):
+        super().__init__(surface, camera)
+        self.color = (230,240,240)
+
+    def draw(self):
+        zoom = self.camera.zoom
+        x, y = self.camera.x, self.camera.y
+        for i in range(0,2001,25):
+            pygame.draw.line(self.surface,  self.color, (x, i*zoom + y), (2001*zoom + x, i*zoom + y), 3)
+            pygame.draw.line(self.surface, self.color, (i*zoom + x, y), (i*zoom + x, 2001*zoom + y), 3)
 
 
 cam = Camera()
+
+grid = Grid(mainScreen, cam)
 
 while (True):
     mainClock.tick(60)
@@ -71,5 +93,7 @@ while (True):
 
     if menu.is_enabled():
         menu.mainloop(mainScreen)
+    else:
+        grid.draw()
 
     pygame.display.flip()
