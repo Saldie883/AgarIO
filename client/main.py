@@ -25,17 +25,20 @@ big_font    = pygame.font.SysFont('Ubuntu',24,True)
 menu = pygame_menu.Menu('Agar.io', DISPLAY_WIDTH, DISPLAY_HEIGHT, theme=pygame_menu.themes.THEME_BLUE)
 
 def start_the_game():
-    global gameState, menu 
+    global gameState, menu, player
     name = userNameTextInput.get_value()
     if len(name) < 4:
         print("Имя слишком короткое")
     else:
         menu.disable()
+        player = Player(mainScreen, cam, name)
 
 userNameTextInput = menu.add.text_input('Name :', default='Tester')
 menu.add.button('Play', start_the_game)
 menu.add.button('Quit', pygame_menu.events.EXIT)
 
+def drawText(message,pos,color=(255,255,255)):
+    mainScreen.blit(font.render(message,1,color),pos)
 
 def getDistance(a, b):
     diffX = math.fabs(a[0]-b[0])
@@ -197,6 +200,10 @@ class Player(Drawable):
         pygame.draw.circle(self.surface, self.outlineColor, center, int((self.mass/2 + 3)*zoom))
         # Отрисовка круга игрока
         pygame.draw.circle(self.surface, self.color, center, int(self.mass/2*zoom))
+        # Отрисовка имени игрока
+        fw, fh = font.size(self.name)
+        drawText(self.name, (self.x*zoom + x - int(fw/2), self.y*zoom + y - int(fh/2)),
+                 Player.FONT_COLOR)
 
 
 
@@ -204,7 +211,7 @@ cam = Camera()
 
 grid = Grid(mainScreen, cam)
 cells = CellList(mainScreen, cam, 2000)
-player = Player(mainScreen, cam, "Test")
+player = None
 
 
 while True:
