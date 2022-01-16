@@ -32,6 +32,34 @@ userNameTextInput = menu.add.text_input('Name :', default='Tester')
 menu.add.button('Play', start_the_game)
 menu.add.button('Quit', pygame_menu.events.EXIT)
 
+
+
+class Camera:
+    def __init__(self):
+        self.x = 0
+        self.y = 0
+        self.width = DISPLAY_WIDTH
+        self.height = DISPLAY_HEIGHT
+        self.zoom = 0.5
+
+    def centre(self,blobOrPos):
+        if isinstance(blobOrPos, Player):
+            x, y = blobOrPos.x, blobOrPos.y
+            self.x = (x - (x*self.zoom)) - x + (DISPLAY_WIDTH/2)
+            self.y = (y - (y*self.zoom)) - y + (DISPLAY_HEIGHT/2)
+        elif type(blobOrPos) == tuple:
+            self.x, self.y = blobOrPos
+
+    def update(self, target):
+        self.zoom = 100/(target.mass)+0.3
+        self.centre(player)
+
+
+
+
+
+cam = Camera()
+
 while (True):
     mainClock.tick(60)
     events = pygame.event.get()
