@@ -5,12 +5,18 @@ import math
 import random
 from pygame.locals import *
 import pygame_menu
+import socket
+import pickle # Для сериализации
+import threading
 
 pygame.init()
 
 # Константы
 DISPLAY_WIDTH   = 1280
 DISPLAY_HEIGHT  = 720
+
+udp_host = "127.0.0.1"	
+udp_port = 1234			        
 
 # Переменные
 mainScreen = pygame.display.set_mode([DISPLAY_WIDTH, DISPLAY_HEIGHT])
@@ -21,17 +27,60 @@ mainClock = pygame.time.Clock()
 font        = pygame.font.SysFont('Ubuntu',20,True)
 big_font    = pygame.font.SysFont('Ubuntu',24,True)
 
+sock = None 
+
+isWorking = True
+
+remotePlayers = {}
+localAddr = None
+
 # Меню
 menu = pygame_menu.Menu('Agar.io', DISPLAY_WIDTH, DISPLAY_HEIGHT, theme=pygame_menu.themes.THEME_BLUE)
 
+def make_request(requestType, requestMessage):
+    data = {
+        "requestType": requestType,
+        "requestMessage": requestMessage
+    }
+    sock.sendto(pickle.dumps(data),(udp_host,udp_port))
+
+def handle_request(data):
+    global localAddr
+    data = pickle.loads(data)
+    requestType = data["requestType"]
+    requestMessage = data["requestMessage"]
+    if requestType == 1:
+        data = data["requestMessage"]
+        remotePlayer = RemotePlayer(mainScreen, player.camera, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7])
+        remotePlayers[data[8]] = remotePlayer
+        make_request(2, [player.name, player.x, player.y, player.mass, player.speed, player.color, player.outlineColor, player.pieces, data[8], localAddr])  
+    elif requestType == 2:
+        data = data["requestMessage"]
+        remotePlayer = RemotePlayer(mainScreen, player.camera, data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7])
+        remotePlayers[data[9]] = remotePlayer
+    elif requestType == 3:
+        localAddr = requestMessage
+    elif requestType == 4:
+        data = data["requestMessage"]
+        remotePlayers[data[0]].x = data[1]
+        remotePlayers[data[0]].y = data[2]
+        remotePlayers[data[0]].mass = data[3]
+        remotePlayers[data[0]].speed = data[4]
+        remotePlayers[data[0]].color = data[5]
+        remotePlayers[data[0]].outlineColor = data[6]
+        remotePlayers[data[0]].pieces = data[7]
+
 def start_the_game():
-    global gameState, menu, player
+    global gameState, menu, player, sock
     name = userNameTextInput.get_value()
     if len(name) < 4:
         print("Имя слишком короткое")
     else:
         menu.disable()
+        sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
         player = Player(mainScreen, cam, name)
+        make_request(1, [name, player.x, player.y, player.mass, player.speed, player.color, player.outlineColor, player.pieces])
+        thread.start()
 
 userNameTextInput = menu.add.text_input('Name :', default='Tester')
 menu.add.button('Play', start_the_game)
@@ -130,7 +179,6 @@ class CellList(Drawable):
         for cell in self.list:
             cell.draw()
 
-
 class Player(Drawable):
     """ Класс игрока
     """
@@ -160,7 +208,6 @@ class Player(Drawable):
         else: self.name = "Test"
         self.pieces = []
 
-
     def collisionDetection(self, edibles):
         """ Проверка коллизии
         """
@@ -169,25 +216,33 @@ class Player(Drawable):
                 self.mass+=0.5
                 edibles.remove(edible)
 
+    def collisionDetectionWithEnemies(self, enemies):
+        enemy_copy = enemies
+        for enemy in enemy_copy:
+            if(getDistance((enemies[enemy].x, enemies[enemy].y), (self.x,self.y)) <= self.mass/2):
+                self.mass+=0.5
+                del enemies[enemy]
 
     def move(self):
         """ Обновление позиции игрока
         """
-    
-        dX, dY = pygame.mouse.get_pos()
-        rotation = math.atan2(dY - float(DISPLAY_HEIGHT)/2, dX - float(DISPLAY_WIDTH)/2)
-        rotation *= 180/math.pi
-        normalized = (90 - math.fabs(rotation))/90
-        vx = self.speed*normalized
-        vy = 0
-        if rotation < 0:
-            vy = -self.speed + math.fabs(vx)
-        else:
-            vy = self.speed - math.fabs(vx)
-        tmpX = self.x + vx
-        tmpY = self.y + vy
-        self.x = tmpX
-        self.y = tmpY
+        global localAddr
+        if pygame.mouse.get_focused() != 0:
+            dX, dY = pygame.mouse.get_pos()
+            rotation = math.atan2(dY - float(DISPLAY_HEIGHT)/2, dX - float(DISPLAY_WIDTH)/2)
+            rotation *= 180/math.pi
+            normalized = (90 - math.fabs(rotation))/90
+            vx = self.speed*normalized
+            vy = 0
+            if rotation < 0:
+                vy = -self.speed + math.fabs(vx)
+            else:
+                vy = self.speed - math.fabs(vx)
+            tmpX = self.x + vx
+            tmpY = self.y + vy
+            self.x = tmpX
+            self.y = tmpY
+            make_request(4, [localAddr, self.x, self.y, self.mass, self.speed, self.color, self.outlineColor, self.pieces])  
 
     def draw(self):
         """ Отрисовка игрока
@@ -205,7 +260,44 @@ class Player(Drawable):
         drawText(self.name, (self.x*zoom + x - int(fw/2), self.y*zoom + y - int(fh/2)),
                  Player.FONT_COLOR)
 
+class RemotePlayer(Drawable):
+    FONT_COLOR = (50, 50, 50)
+    
+    def __init__(self, surface, camera, name, x, y, mass, speed, color, outlineColor, pieces):
+        super().__init__(surface, camera)
+        self.x = x
+        self.y = y
+        self.mass = mass
+        self.speed =speed
+        self.color = col = color
+        self.outlineColor = outlineColor
+        self.name = name
+        self.pieces = pieces
 
+    def draw(self):
+        """ Отрисовка игрока
+        """
+        zoom = self.camera.zoom
+        x, y = self.camera.x, self.camera.y
+        center = (int(self.x*zoom + x), int(self.y*zoom + y))
+        
+        # Отрисовка круга вокруг игрока
+        pygame.draw.circle(self.surface, self.outlineColor, center, int((self.mass/2 + 3)*zoom))
+        # Отрисовка круга игрока
+        pygame.draw.circle(self.surface, self.color, center, int(self.mass/2*zoom))
+        # Отрисовка имени игрока
+        fw, fh = font.size(self.name)
+        drawText(self.name, (self.x*zoom + x - int(fw/2), self.y*zoom + y - int(fh/2)),
+                 Player.FONT_COLOR)
+
+def thread_handling_request():
+    while isWorking:
+        try:
+            data = sock.recvfrom(2048)
+            handle_request(data[0])
+        except Exception as ex:
+            #print("Error: ", ex)
+            pass
 
 cam = Camera()
 
@@ -213,13 +305,15 @@ grid = Grid(mainScreen, cam)
 cells = CellList(mainScreen, cam, 2000)
 player = None
 
+thread = threading.Thread(target=thread_handling_request)
 
-while True:
+while isWorking:
     mainClock.tick(60)
     events = pygame.event.get()
     for event in events:
         if event.type == QUIT:
             pygame.quit()
+            isWorking = False
             quit()
 
     if menu.is_enabled():
@@ -227,10 +321,15 @@ while True:
     else:
         player.move()
         player.collisionDetection(cells.list)
+        player.collisionDetectionWithEnemies(remotePlayers)
         cam.update(player)
         mainScreen.fill((255, 255, 255))
         grid.draw()
         cells.draw()
         player.draw()
+        for i in remotePlayers:
+            remotePlayers[i].draw()
 
     pygame.display.flip()
+
+thread.exit()
