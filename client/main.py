@@ -2,6 +2,7 @@
 import sys 
 import pygame
 import math
+import random
 from pygame.locals import *
 import pygame_menu
 
@@ -18,7 +19,7 @@ pygame.display.set_caption("Agar.io")
 mainClock = pygame.time.Clock() 
 
 # Меню
-menu  = pygame_menu.Menu('Agar.io', DISPLAY_WIDTH, DISPLAY_HEIGHT, theme=pygame_menu.themes.THEME_BLUE)
+menu = pygame_menu.Menu('Agar.io', DISPLAY_WIDTH, DISPLAY_HEIGHT, theme=pygame_menu.themes.THEME_BLUE)
 
 def start_the_game():
     global gameState, menu 
@@ -77,10 +78,52 @@ class Grid(Drawable):
             pygame.draw.line(self.surface,  self.color, (x, i*zoom + y), (2001*zoom + x, i*zoom + y), 3)
             pygame.draw.line(self.surface, self.color, (i*zoom + x, y), (i*zoom + x, 2001*zoom + y), 3)
 
+class Cell(Drawable): 
+    """ Класс клеток которые игроки поднимают """
+    CELL_COLORS = 
+    [ # Цвета для клеток
+        (80,252,54),
+        (36,244,255),
+        (243,31,46),
+        (4,39,243),
+        (254,6,178),
+        (255,211,7),
+        (216,6,254),
+        (145,255,7),
+        (7,255,182),
+        (255,6,86),
+        (147,7,255)
+    ]
+    
+    def __init__(self, surface, camera):
+        super().__init__(surface, camera)
+        self.x = random.randint(20,1980)
+        self.y = random.randint(20,1980)
+        self.mass = 7
+        self.color = random.choice(Cell.CELL_COLORS)
+
+    def draw(self):
+        zoom = self.camera.zoom
+        x,y = self.camera.x, self.camera.y
+        center = (int(self.x*zoom + x), int(self.y*zoom + y))
+        pygame.draw.circle(self.surface, self.color, center, int(self.mass*zoom))
+
+class CellList(Drawable):
+    """ Класс группирования клеток """
+    def __init__(self, surface, camera, numOfCells):
+        super().__init__(surface, camera)
+        self.count = numOfCells
+        self.list = []
+        for i in range(self.count): self.list.append(Cell(self.surface, self.camera))
+
+    def draw(self):
+        for cell in self.list:
+            cell.draw()
 
 cam = Camera()
 
 grid = Grid(mainScreen, cam)
+cells = CellList(mainScreen, cam, 2000)
 
 while (True):
     mainClock.tick(60)
@@ -95,5 +138,6 @@ while (True):
         menu.mainloop(mainScreen)
     else:
         grid.draw()
+        cells.draw()
 
     pygame.display.flip()
