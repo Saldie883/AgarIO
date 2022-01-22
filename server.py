@@ -7,6 +7,7 @@ import random
 from os import system
 
 import codes as code
+import time
 
 
 def recv_all_data(server, players_data, cells_data):
@@ -18,7 +19,10 @@ def recv_all_data(server, players_data, cells_data):
     #     mass = int }
 
     while True:
-        data, addr = recieve(server)
+        try:
+            data, addr = recieve(server)
+        except ConnectionResetError:
+            continue
 
         if data['code'] == code.CONNECT_REQUEST:
             new_player_pos = (random.randint(0, MAPSIZE), random.randint(0, MAPSIZE))
@@ -37,11 +41,24 @@ def recv_all_data(server, players_data, cells_data):
             del cells_data[data['cell']]
             print(f"got eaten cell: {data['cell']} ({len(cells_data)})")
 
+        elif data['code'] == code.ENEMY_EAT:
+            send({'code': code.DIED}, data['player'])
+            del players_data[data['player']]
+
+        elif data['code'] == code.DISCONNECT:
+            del players_data[addr]
+
+
 
 def sync_data(players_data, cells_data):
     print("Sync started...")
 
     while True:
+        # Generating new cells if old have been eaten
+        while len(cells_data) < CELLS_AMOUNT:
+            new_cell = make_cell(MAPSIZE)
+            cells_data[new_cell[0]] = new_cell[1]
+
         cd = deepcopy(cells_data)
         pd = deepcopy(players_data)
 
