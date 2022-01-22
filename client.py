@@ -164,6 +164,30 @@ class Camera():
         self.y = player.y
 
 
+def deadscreen():
+    RUN = True
+
+    while RUN:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                RUN = False
+
+        # Drawing ------------------------------------------
+        screen.fill((35, 35, 35))
+
+        # Draw players nickname and score
+        nick = font.render(nickname, False, (255, 255, 255))
+        score = font.render(f"Score: {player.mass}", False, (255, 255, 255))
+
+        screen.blit(nick, (SCREEN_SIZE[0]//2 - nick.get_width()//2, (SCREEN_SIZE[1]//2 - nick.get_height()//2)-20))
+        screen.blit(score, (SCREEN_SIZE[0]//2 - score.get_width()//2, (SCREEN_SIZE[1]//2 - score.get_height()//2)+20))
+
+        pygame.display.flip()
+        elapsed = clock.tick(settings.FPS)/1000
+        pygame.display.set_caption("AgarIO")
+
+    pygame.quit()
+
 # connecting to server ---------------
 HOST, PORT = 'localhost', 7777
 
@@ -239,6 +263,7 @@ while RUNNING:
 
         if data:
             if data['code'] == code.DIED:
+                deadscreen()
                 sys.exit()
 
             relevant_data = data
@@ -301,7 +326,6 @@ while RUNNING:
     if scoreboard:
         for pos, (nick, mass) in enumerate(scoreboard.items(), 1):
             text = font.render(f"{pos}. {nick} - {mass}", False, (255, 255, 255))
-            print(pos, nick, mass, (10, 10*pos))
             screen.blit(text, (10, 10+(text.get_height()*(pos-1))))
 
     # Sending relevant info to server ---------------------

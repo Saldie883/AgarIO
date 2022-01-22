@@ -108,10 +108,10 @@ def sync_data(players_data, cells_data):
             # Send data to player
 
             # Scoreboard
-            print(players_data)
             scoreboard = {i['nickname']: i['mass'] for i in players_data.values()}
             scoreboard = {k: v for k, v in sorted(scoreboard.items(), key=lambda mass: mass[1], reverse=True)}
             send({"code": code.DATA_SEND, "cells": cells_for_player, "players": enemies_for_player, "scoreboard": scoreboard}, player)
+            print(f"Sent {len(cells_for_player)} cells and {len(enemies_for_player)} enemies to player {info['nickname']}")
 
 
 def send(data, client):
