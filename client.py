@@ -14,6 +14,7 @@ SCREEN_SIZE = settings.SCREEN_SIZE
 screen = pygame.display.set_mode(SCREEN_SIZE)
 pygame.font.init()
 font = pygame.font.SysFont('Comic Sans MS', 30)
+font_s = pygame.font.SysFont('Comic Sans MS', 18)
 clock = pygame.time.Clock()
 
 elapsed = 0
@@ -76,7 +77,7 @@ class Player(pygame.sprite.Sprite):
             if sqrt((c.x-self.x)**2 + (c.y-self.y)**2) < c.mass + self.mass:
                 self.mass += c.mass
                 cells.remove(c)
-                
+
                 send_to_server(client, {"code": code.CELL_EAT, "cell": (c.x, c.y)}, (HOST, PORT))
 
 
@@ -96,13 +97,14 @@ class Player(pygame.sprite.Sprite):
 
 
 class Enemy(pygame.sprite.Sprite):
-    def __init__(self, x, y, mass, addr, color=None):
+    def __init__(self, x, y, mass, addr, nickname, color=None):
         super(Enemy, self).__init__()
         self.mass = mass
         self.x = x
         self.y = y
         self.color = color if color else random.choice(OBJ_COLORS)
         self.addr = addr
+        self.nickname = nickname
 
 
     def draw(self, screen, camera):
@@ -165,12 +167,17 @@ class Camera():
 # connecting to server ---------------
 HOST, PORT = 'localhost', 7777
 
+nickname = ""
+
+while len(nickname) < 3 or len(nickname) > 20:
+    nickname = input("Enter nickname: ")
+
 print(f"Connecting to {HOST}:{PORT}")
 client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 client.setblocking(False)
 
 # Request server for connection (for getting init info)
-send_to_server(client, {"code": code.CONNECT_REQUEST}, (HOST, PORT))
+send_to_server(client, {"code": code.CONNECT_REQUEST, "nickname": nickname}, (HOST, PORT))
 
 connected = False
 print("Waiting for connection")
@@ -213,6 +220,7 @@ player = Player(*player_coordinates, color=player_color)
 camera = Camera(player.x, player.y, *SCREEN_SIZE)
 # Placing arena borders
 borders = (Border(0, 0, 5, MAPSIZE), Border(0, 0, MAPSIZE, 5), Border(MAPSIZE, 0, 5, MAPSIZE), Border(0, MAPSIZE, MAPSIZE, 5))
+scoreboard = None
 
 # Game loop --------------------------------------------
 while RUNNING:
@@ -247,7 +255,9 @@ while RUNNING:
         for enemy, info in relevant_data['players'].items():
             if enemy == player_address:
                 continue
-            enemies.add(Enemy(*info['pos'], addr=enemy, color=info['color'], mass=info['mass']))
+            enemies.add(Enemy(*info['pos'], addr=enemy, color=info['color'], mass=info['mass'], nickname=info['nickname']))
+
+        scoreboard = relevant_data['scoreboard']
 
 
     # Updating -----------------------------------------
@@ -264,6 +274,10 @@ while RUNNING:
 
     for e in enemies:
         e.draw(screen, camera)
+        nickname_rendered = font_s.render(e.nickname, False, (255, 255, 255))
+        nick_coords = camera.translate_coords(e)
+        screen.blit(nickname_rendered, (nick_coords[0]-nickname_rendered.get_width()//2, nick_coords[1]-nickname_rendered.get_height()//2))    
+
 
     for b in borders:
         b.draw(screen, camera)
@@ -272,13 +286,27 @@ while RUNNING:
     xc = font.render(f"X: {round(player.x, 1)}", False, (255, 255, 255))
     yc = font.render(f"Y: {round(player.y, 1)}", False, (255, 255, 255))
     score = font.render(f"Score: {player.mass}", False, (255, 255, 255))
-    screen.blit(xc, (10, 10))
-    screen.blit(yc, (10, 10+xc.get_height()))
-    screen.blit(score, (10, 10+xc.get_height()+yc.get_height()))
+    nickname_rendered = font_s.render(nickname, False, (255, 255, 255))
+
+    offset_score = SCREEN_SIZE[1]-score.get_height()-10
+    offset_y = offset_score-yc.get_height()-10
+    offset_x = offset_y-xc.get_height()-10
+
+    screen.blit(xc, (10, offset_x))
+    screen.blit(yc, (10, offset_y))
+    screen.blit(score, (10, offset_score))
+    screen.blit(nickname_rendered, (SCREEN_SIZE[0]//2 - nickname_rendered.get_width()//2, SCREEN_SIZE[1]//2 - nickname_rendered.get_height()//2))
+
+    # Scoreboard
+    if scoreboard:
+        for pos, (nick, mass) in enumerate(scoreboard.items(), 1):
+            text = font.render(f"{pos}. {nick} - {mass}", False, (255, 255, 255))
+            print(pos, nick, mass, (10, 10*pos))
+            screen.blit(text, (10, 10+(text.get_height()*(pos-1))))
 
     # Sending relevant info to server ---------------------
 
-    send_to_server(client, {"code": code.DATA_SEND, "pos": (player.x, player.y), "color": player.color, "mass": player.mass}, (HOST, PORT))
+    send_to_server(client, {"code": code.DATA_SEND, "pos": (player.x, player.y), "color": player.color, "mass": player.mass, "nickname": nickname}, (HOST, PORT))
 
     # --------------------------------------------------
 

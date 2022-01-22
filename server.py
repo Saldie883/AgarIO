@@ -25,7 +25,7 @@ def recv_all_data(server, players_data, cells_data):
             new_player_pos = (random.randint(0, MAPSIZE), random.randint(0, MAPSIZE))
             new_player_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 
-            players_data[addr] = {'pos': new_player_pos, 'color': new_player_color, 'mass': 20}
+            players_data[addr] = {'pos': new_player_pos, 'color': new_player_color, 'mass': 20, 'nickname': data['nickname']}
 
             print(f"Connected {addr}")
             send({'code': code.CONNECTED, 'addr': addr, \
@@ -106,7 +106,12 @@ def sync_data(players_data, cells_data):
                                  get_item_from_matrix(enemies_data, ptx+1, pty-1) | get_item_from_matrix(enemies_data, ptx+1, pty) | get_item_from_matrix(enemies_data, ptx+1, pty+1)
 
             # Send data to player
-            send({"code": code.DATA_SEND, "cells": cells_for_player, "players": enemies_for_player}, player)
+
+            # Scoreboard
+            print(players_data)
+            scoreboard = {i['nickname']: i['mass'] for i in players_data.values()}
+            scoreboard = {k: v for k, v in sorted(scoreboard.items(), key=lambda mass: mass[1], reverse=True)}
+            send({"code": code.DATA_SEND, "cells": cells_for_player, "players": enemies_for_player, "scoreboard": scoreboard}, player)
 
 
 def send(data, client):
@@ -120,7 +125,7 @@ def recieve(server):
 
 # Map parameters -----------------------------------------
 TILESIZE = 800                         # Size of each tile in pixels
-TILESAMOUNT = 10                       # Amount of tiles
+TILESAMOUNT = 5                       # Amount of tiles
 MAPSIZE = TILESIZE * TILESAMOUNT       # Mapsize in pixels
 
 CELLS_AMOUNT = MAPSIZE//10             # Amount of cells on the map
