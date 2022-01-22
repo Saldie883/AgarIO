@@ -28,7 +28,7 @@ def recv_all_data(server, players_data, cells_data):
             players_data[addr] = {'pos': new_player_pos, 'color': new_player_color, 'mass': 20}
 
             print(f"Connected {addr}")
-            send({'code': code.CONNECTED, 'addr': addr, 'cells': cells_data, 'players': players_data, \
+            send({'code': code.CONNECTED, 'addr': addr, \
                 'mapsize': MAPSIZE, 'coords': new_player_pos, 'color': new_player_color}, addr)
 
         # Recieve update from player
@@ -37,7 +37,6 @@ def recv_all_data(server, players_data, cells_data):
 
         # Player eats cell
         elif data['code'] == code.CELL_EAT:
-            print(f"cell at {data['cell']} eated")
             if data['cell'] in cells_data:
                 del cells_data[data['cell']]
 
@@ -64,7 +63,7 @@ def sync_data(players_data, cells_data):
         cd = deepcopy(cells_data)
         pd = deepcopy(players_data)
 
-        # Splitting all cells into tiles
+        # Splitting all cells into tiles for sending only closest cells to player
         # Matrix of tiles
         tiles_data = []
         for _ in range(TILESAMOUNT):
@@ -73,11 +72,12 @@ def sync_data(players_data, cells_data):
                 row.append(dict())
             tiles_data.append(row)
 
-        for c, color in cells_data.items():
+        # Sorting each cell into corresponding tile
+        for c, color in cd.items():
             cell_tile = get_tile_of_point(*c, TILESIZE)
             tiles_data[cell_tile[1]][cell_tile[0]][c] = color
 
-        # Splitting all enemies into tiles
+        # Splitting all enemies into tiles for sending only closest enemies to player
         # Matrix of enemies
         enemies_data = []
         for _ in range(TILESAMOUNT):
@@ -86,22 +86,26 @@ def sync_data(players_data, cells_data):
                 row.append(dict())
             enemies_data.append(row)
 
-        for enemy, info in players_data.items():
+        # Sorting each enemy into corresponding tile
+        for enemy, info in pd.items():
             enemy_tile = get_tile_of_point(*info['pos'], TILESIZE)
             enemies_data[enemy_tile[1]][enemy_tile[0]][enemy] = info
 
         # Sending data to players based on their tile
-        for player, info in players_data.copy().items():
-            ptx, pty = get_tile_of_point(*info['pos'], TILESIZE)
+        for player, info in pd.items():
+            ptx, pty = get_tile_of_point(*info['pos'], TILESIZE)    # Tile of player
 
+            # Getting all cells from neighboring tiles
             cells_for_player = get_item_from_matrix(tiles_data, ptx-1, pty-1) | get_item_from_matrix(tiles_data, ptx-1, pty) | get_item_from_matrix(tiles_data, ptx-1, pty+1) | \
                                get_item_from_matrix(tiles_data, ptx, pty-1)   | get_item_from_matrix(tiles_data, ptx, pty)   | get_item_from_matrix(tiles_data, ptx, pty+1)   | \
                                get_item_from_matrix(tiles_data, ptx+1, pty-1) | get_item_from_matrix(tiles_data, ptx+1, pty) | get_item_from_matrix(tiles_data, ptx+1, pty+1)
 
+            # Getting all enemies from neighboring tiles
             enemies_for_player = get_item_from_matrix(enemies_data, ptx-1, pty-1) | get_item_from_matrix(enemies_data, ptx-1, pty) | get_item_from_matrix(enemies_data, ptx-1, pty+1) | \
                                  get_item_from_matrix(enemies_data, ptx, pty-1)   | get_item_from_matrix(enemies_data, ptx, pty)   | get_item_from_matrix(enemies_data, ptx, pty+1)   | \
                                  get_item_from_matrix(enemies_data, ptx+1, pty-1) | get_item_from_matrix(enemies_data, ptx+1, pty) | get_item_from_matrix(enemies_data, ptx+1, pty+1)
 
+            # Send data to player
             send({"code": code.DATA_SEND, "cells": cells_for_player, "players": enemies_for_player}, player)
 
 
@@ -115,13 +119,14 @@ def recieve(server):
 
 
 # Map parameters -----------------------------------------
-TILESIZE = 800      # tile size = screen size
-TILESAMOUNT = 10
-MAPSIZE = TILESIZE * TILESAMOUNT
+TILESIZE = 800                         # Size of each tile in pixels
+TILESAMOUNT = 10                       # Amount of tiles
+MAPSIZE = TILESIZE * TILESAMOUNT       # Mapsize in pixels
 
-CELLS_AMOUNT = MAPSIZE//10
-CELLS_DATA = dict()
+CELLS_AMOUNT = MAPSIZE//10             # Amount of cells on the map
+CELLS_DATA = dict()                    # Dict for storing cells positions and colors
 
+# Generating cells at random positions
 for _ in range(CELLS_AMOUNT):
     new_cell = make_cell(MAPSIZE)
     CELLS_DATA[new_cell[0]] = new_cell[1]
@@ -142,7 +147,9 @@ system("CLS")
 print("\t\t[ Server started ]")
 
 PLAYERS_DATA = {}
+# Thread for recieving new information
 recv_thread = threading.Thread(target=recv_all_data, args=(server, PLAYERS_DATA, CELLS_DATA))
+# Thread for sending relevant info to all players
 send_thread = threading.Thread(target=sync_data, args=(PLAYERS_DATA, CELLS_DATA))
 
 recv_thread.start()
