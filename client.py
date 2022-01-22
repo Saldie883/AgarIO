@@ -1,4 +1,3 @@
-import pygame
 from pygame.locals import K_w, K_a, K_s, K_d, K_i
 from math import sqrt, hypot
 import pickle
@@ -6,11 +5,15 @@ import sys
 import random
 import codes as code
 import socket
+from tools import *
+import settings
 
 pygame.init()
 SCREEN_SIZE = [800, 800]
 
 screen = pygame.display.set_mode(SCREEN_SIZE)
+pygame.font.init()
+font = pygame.font.SysFont('Comic Sans MS', 30)
 clock = pygame.time.Clock()
 
 elapsed = 0
@@ -27,7 +30,7 @@ def send_to_server(client, data, server):
 
 def recieve_from_server(server):
     try:
-        data, addr = server.recvfrom(2048)
+        data, addr = server.recvfrom(settings.BUFSIZE)
         return pickle.loads(data)
     except BlockingIOError:
         return None
@@ -52,7 +55,7 @@ class Player(pygame.sprite.Sprite):
         self.y = y
 
 
-    def update(self, time, camera, cells, borders):
+    def update(self, time, camera, cells, borders, enemies):
         # Moving
 
         if pygame.mouse.get_focused():
@@ -82,8 +85,18 @@ class Player(pygame.sprite.Sprite):
                 self.mass += c.mass
                 cells.remove(c)
 
+                print("send eat message")
                 send_to_server(client, {"code": code.CELL_EAT, "cell": (c.x, c.y)}, (HOST, PORT))
 
+
+        # Eating enemies
+        for e in enemies:
+            # If enemy center inside player circle and player's mass greater than enemy - player eat enemy
+            if point_in_cirlce(self.x, self.y, self.mass, e.x, e.y) and self.mass / e.mass >= 1.2:
+                # Sending ENEMY_EAT event to server
+                send_to_server(client, {"code": code.ENEMY_EAT, "player": e.addr}, (HOST, PORT))
+
+                self.mass += e.mass * 0.8     # Adding enemy mass to player's mass
 
 
     def draw(self, screen, camera):
@@ -92,12 +105,13 @@ class Player(pygame.sprite.Sprite):
 
 
 class Enemy(pygame.sprite.Sprite):
-    def __init__(self, x, y, mass, color=None):
+    def __init__(self, x, y, mass, addr, color=None):
         super(Enemy, self).__init__()
         self.mass = mass
         self.x = x
         self.y = y
         self.color = color if color else random.choice(PLAYER_COLORS)
+        self.addr = addr
 
 
     def draw(self, screen, camera):
@@ -192,7 +206,7 @@ while not connected:
         for enemy, info in data['players'].items():
             if enemy == player_address:
                 continue
-            enemies.add(Enemy(*info['pos'], color=info['color'], mass=info['mass']))
+            enemies.add(Enemy(*info['pos'], addr=enemy, color=info['color'], mass=info['mass']))
 
         connected = True
 
@@ -211,21 +225,26 @@ camera = Camera(player.x, player.y, *SCREEN_SIZE)
 borders = (Border(0, 0, 5, MAPSIZE), Border(0, 0, MAPSIZE, 5), Border(MAPSIZE, 0, 5, MAPSIZE), Border(0, MAPSIZE, MAPSIZE, 5))
 
 print("\n\n\tStarted game")
+
 # Game loop --------------------------------------------
 while RUNNING:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
+            send_to_server(client, {"code": code.DISCONNECT}, (HOST, PORT))
             RUNNING = False
 
     # Getting fresh data -------------------------------
-
     fresh_data = None
 
     # getting latest data
     while True:
         data = recieve_from_server(client)
 
+
         if data:
+            if data['code'] == code.DIED:
+                sys.exit()
+
             fresh_data = data
         else:
             break
@@ -240,21 +259,15 @@ while RUNNING:
         for enemy, info in fresh_data['players'].items():
             if enemy == player_address:
                 continue
-            enemies.add(Enemy(*info['pos'], color=info['color'], mass=info['mass']))
+            enemies.add(Enemy(*info['pos'], addr=enemy, color=info['color'], mass=info['mass']))
 
 
-    # --------------------------------------------------
-
-    player.update(elapsed, camera, cells, borders)
+    # Updating -----------------------------------------
+    player.update(elapsed, camera, cells, borders, enemies)
     camera.update(player)
-
 
     # Drawing ------------------------------------------
     screen.fill((35, 35, 35))
-
-    # Else
-
-
 
     player.draw(screen, camera)
 
@@ -267,6 +280,14 @@ while RUNNING:
     for b in borders:
         b.draw(screen, camera)
 
+    # GUI
+    xc = font.render(f"X: {round(player.x, 1)}", False, (255, 255, 255))
+    yc = font.render(f"Y: {round(player.y, 1)}", False, (255, 255, 255))
+    score = font.render(f"Score: {player.mass}", False, (255, 255, 255))
+    screen.blit(xc, (10, 10))
+    screen.blit(yc, (10, 10+xc.get_height()))
+    screen.blit(score, (10, 10+xc.get_height()+yc.get_height()))
+
     # Sending fresh info to server ---------------------
 
     send_to_server(client, {"code": code.DATA_SEND, "pos": (player.x, player.y), "color": player.color, "mass": player.mass}, (HOST, PORT))
@@ -275,7 +296,7 @@ while RUNNING:
 
     pygame.display.flip()
     elapsed = clock.tick(FPS)/1000
+    pygame.display.set_caption("AgarIO")
     pygame.display.set_caption(str(elapsed))
-
 
 pygame.quit()
